@@ -1,5 +1,9 @@
 ﻿Find Reference
 
+<p align="center">
+    English | <a href="./README-zh.md">中文</a>
+</p>
+
 v1.2.0:
     Fix the progress bar for refreshing the cache, refactor the event hub, and optimize the logs
     
