@@ -1,8 +1,14 @@
-﻿Find Reference
+﻿<h1 align="left">Find Reference</h1>
 
-<p align="center">
+<p align="left">
     English | <a href="./README-zh.md">中文</a>
 </p>
+
+<p align="left">
+    <em>Find the reference relationship of Unity's resources.</em>
+</p>
+
+<hr>
 
 v1.2.0:
     Fix the progress bar for refreshing the cache, refactor the event hub, and optimize the logs

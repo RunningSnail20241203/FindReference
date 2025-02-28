@@ -1,9 +1,14 @@
-﻿# FindReference
-查找Unity的资源的引用关系
+﻿<h1 align="left">查引用</h1>
 
-<p align="center">
+<p align="left">
     <a href="./README.md">English</a> | 中文
 </p>
+
+<p align="left">
+    <em>查找Unity的资源的引用关系</em>
+</p>
+
+<hr>
 
 v1.2.0:
     修复刷新缓存的进度条,重构事件中心，优化日志
