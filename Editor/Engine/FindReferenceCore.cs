@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading;
 using FindReference.Editor.Common;
 using FindReference.Editor.Data;
+using FindReference.Editor.EventListener;
+using UnityEditor;
 using UnityEngine;
 
 // ReSharper disable once CheckNamespace
@@ -140,9 +142,16 @@ namespace FindReference.Editor.Engine
 
         private async void UpdateCacheSilent(List<string> processFiles)
         {
+            var startTime = EditorApplication.timeSinceStartup;
             try
             {
                 processFiles = Filter(processFiles.ToArray(), _fileContainGuid, true);
+
+                if (processFiles.Count == 0)
+                {
+                    FindReferenceLogger.Log("没有符合条件的文件");
+                    return;
+                }
 
                 var refDatas = await new ParseReferenceTask(processFiles).Start();
 
@@ -152,10 +161,15 @@ namespace FindReference.Editor.Engine
             {
                 FindReferenceLogger.LogError($"静默刷新缓存出错：{e.Message}");
             }
+            finally
+            {
+                FindReferenceLogger.Log($"处理 {processFiles.Count} 个资源完毕, 耗时：{EditorApplication.timeSinceStartup - startTime}s");
+            }
         }
 
         private async void RefreshCache(CancellationToken token)
         {
+            var reGeTime = EditorApplication.timeSinceStartup;
             IsWorking = true;
             try
             {
@@ -181,6 +195,8 @@ namespace FindReference.Editor.Engine
             finally
             {
                 IsWorking = false;
+                EventCenter.Instance.Publish(FEventType.TaskEnd, null);
+                FindReferenceLogger.Log($"任务结束,用时：{EditorApplication.timeSinceStartup - reGeTime}s");
             }
         }
 

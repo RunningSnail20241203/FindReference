@@ -8,6 +8,7 @@ using UnityEngine;
 namespace FindReference.Editor.Data
 {
     [FilePath(AssetPath, FilePathAttribute.Location.ProjectFolder)]
+    [InitializeOnLoad]
     public class FindReferenceDataBase : ScriptableSingleton<FindReferenceDataBase>
     {
         #region Private Data
@@ -26,7 +27,6 @@ namespace FindReference.Editor.Data
         {
             var reGeTime = EditorApplication.timeSinceStartup;
             BuildReference();
-            Save();
             FindReferenceLogger.Log($"重建缓存,用时：{EditorApplication.timeSinceStartup - reGeTime}s");
             return;
 
@@ -108,7 +108,6 @@ namespace FindReference.Editor.Data
             _referenceDict.Clear();
             datas.Clear();
             _isDirty = true;
-            Save();
         }
 
         #endregion
@@ -128,6 +127,17 @@ namespace FindReference.Editor.Data
         #endregion
 
         #region Private Methods
+
+        static FindReferenceDataBase()
+        {
+            EditorApplication.quitting -= OnEditorQuitting;
+            EditorApplication.quitting += OnEditorQuitting;
+        }
+
+        private static void OnEditorQuitting()
+        {
+            instance.Save();
+        }
 
         private void Save()
         {

@@ -22,11 +22,11 @@ namespace FindReference.Editor.Watcher
             
             if (importedAssets.Length == 0) return;
             
-            FindReferenceLogger.Log("检测到资源变化------------------------------------");
-            foreach (var str in importedAssets)
-            {
-                FindReferenceLogger.Log($"importedAssets : {str}");
-            }
+            FindReferenceLogger.Log($"检测到 {importedAssets.Length} 个资源变化");
+            // foreach (var str in importedAssets)
+            // {
+            //     FindReferenceLogger.Log($"importedAssets : {str}");
+            // }
 
             FindReferenceAssetChangeCache.instance.CacheChangeAssetPaths(importedAssets);
             if (EditorApplication.isCompiling)
@@ -61,7 +61,7 @@ namespace FindReference.Editor.Watcher
     {
         private static AssetDeleteResult OnWillDeleteAsset(string assetPath, RemoveAssetOptions options)
         {
-            FindReferenceLogger.Log($"deletedAssets : {assetPath}");
+            FindReferenceLogger.Log($"检测到资源 {assetPath} 被删除");
             
             // 删除文件之前，先删除引用关系
             var guid = AssetDatabase.AssetPathToGUID(assetPath);

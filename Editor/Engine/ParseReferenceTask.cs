@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FindReference.Editor.Common;
 using FindReference.Editor.Data;
+using FindReference.Editor.EventListener;
 using UnityEngine;
 
 // ReSharper disable once CheckNamespace
@@ -35,14 +36,16 @@ namespace FindReference.Editor.Engine
             var numberOfTasks = CalcTaskCount(_files.Count);
             var segmentSize = CalcSegmentSize(_files.Count, numberOfTasks);
 
-            FindReferenceLogger.Log($"将任务分为了 {numberOfTasks} 个job");
+            _taskProgress = new float[numberOfTasks];
+            // FindReferenceLogger.Log($"将任务分为了 {numberOfTasks} 个job");
             var tasks = new Task<List<FindReferenceData>>[numberOfTasks];
             for (var i = 0; i < numberOfTasks; i++)
             {
                 var count = i == numberOfTasks - 1 ? _files.Count - i * segmentSize : segmentSize;
                 var temp = _files.GetRange(i * segmentSize, count);
-                FindReferenceLogger.Log($"任务 {i} 处理 {count} 个文件");
-                tasks[i] = Task.Run(() => ParseFileList(temp, _token), _token);
+                // FindReferenceLogger.Log($"任务 {i} 处理 {count} 个文件");
+                var i1 = i;
+                tasks[i] = Task.Run(() => ParseFileList(temp, _token, i1), _token);
             }
 
             var allResults = await Task.WhenAll(tasks);
@@ -69,7 +72,7 @@ namespace FindReference.Editor.Engine
             }
         }
 
-        private List<FindReferenceData> ParseFileList(List<string> files, CancellationToken cancellationToken)
+        private List<FindReferenceData> ParseFileList(List<string> files, CancellationToken cancellationToken, int taskIdx)
         {
             var ret = new List<FindReferenceData>();
             files.ForEach(ParseOneFile);
@@ -99,6 +102,7 @@ namespace FindReference.Editor.Engine
                     var children = set.ToList();
                     var data = new FindReferenceData(guid, children, null);
                     ret.Add(data);
+                    UpdateProgress(taskIdx, (float)ret.Count / files.Count);
                 }
                 catch (Exception ex)
                 {
@@ -128,6 +132,19 @@ namespace FindReference.Editor.Engine
                     return null;
                 }
             }
+        }
+
+        private float[] _taskProgress;
+        private void UpdateProgress(int taskIdx, float value)
+        {
+            var oldValue = _taskProgress.Average(); 
+            _taskProgress[taskIdx] = value;
+            var newValue = _taskProgress.Average(); 
+            EventCenter.Instance.Publish(FEventType.ParseTask, new TaskProgressUpdateEvent()
+            {
+                OldProgress = oldValue,
+                NewProgress = newValue
+            });
         }
     }
 }

@@ -2,6 +2,7 @@
 using System.Threading;
 using FindReference.Editor.Common;
 using FindReference.Editor.Engine;
+using FindReference.Editor.EventListener;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -47,18 +48,6 @@ namespace FindReference.Editor.View
             _scrollPos = GUILayout.BeginScrollView(_scrollPos);
             DrawWindow();
             GUILayout.EndScrollView();
-        }
-
-        private void OnEnable()
-        {
-            EventCenter.Instance.Register<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
-            EventCenter.Instance.Register<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
-        }
-
-        private void OnDisable()
-        {
-            EventCenter.Instance.UnRegister<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
-            EventCenter.Instance.UnRegister<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
         }
 
         #endregion
@@ -126,15 +115,12 @@ namespace FindReference.Editor.View
                
                 if (GUILayout.Button(text))
                 {
+                     EditorApplication.update += EventCenter.Instance.Update;
+                     EventCenter.Instance.Register(FEventType.GetFilesTask, OnGetFilesTaskProgress);
+                     EventCenter.Instance.Register(FEventType.ParseTask, OnParseReferencesTaskProgress);
+                     EventCenter.Instance.Register(FEventType.TaskEnd, OnTaskEnd);
+                     
                      FindReferenceCore.Instance.RefreshDataBase();
-
-                     EventCenter.Instance.Register<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
-                     EventCenter.Instance.Register<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
-                }
-                else
-                {
-                    EventCenter.Instance.UnRegister<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
-                    EventCenter.Instance.UnRegister<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
                 }
             }
             else
@@ -150,24 +136,39 @@ namespace FindReference.Editor.View
             }
         }
 
+
         #endregion
 
         #region Listener Callback
 
-        private void OnGetFilesTaskProgress(float progress)
+        private void OnGetFilesTaskProgress(BaseEventData evt)
         {
-            if (EditorUtility.DisplayCancelableProgressBar("正在搜集文件列表", "", progress))
+            if (evt is not TaskProgressUpdateEvent evt1) return;
+            
+            // FindReferenceLogger.Log($"OnGetFilesTaskProgress:{evt1.NewProgress}");
+            if (EditorUtility.DisplayCancelableProgressBar("正在搜集文件列表", "", evt1.NewProgress))
             {
                 _cancellationTokenSource.Cancel();
             }
         }
 
-        private void OnParseReferencesTaskProgress(float progress)
+        private void OnParseReferencesTaskProgress(BaseEventData evt)
         {
-            if (EditorUtility.DisplayCancelableProgressBar("正在解析文件引用关系", "", progress))
+            if (evt is not TaskProgressUpdateEvent evt1) return;
+
+            // FindReferenceLogger.Log($"OnParseReferencesTaskProgress:{evt1.NewProgress}");
+            if (EditorUtility.DisplayCancelableProgressBar("正在解析文件引用关系", "", evt1.NewProgress))
             {
                 _cancellationTokenSource.Cancel();
             }
+        }
+
+        private void OnTaskEnd(BaseEventData obj)
+        {
+            EditorUtility.ClearProgressBar();
+
+            EditorApplication.update -= EventCenter.Instance.Update;
+            EventCenter.Instance.Clear();
         }
 
         #endregion

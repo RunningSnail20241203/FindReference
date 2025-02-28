@@ -2,7 +2,7 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using FindReference.Editor.Common;
+using FindReference.Editor.EventListener;
 
 // ReSharper disable once CheckNamespace
 namespace FindReference.Editor.Engine
@@ -24,7 +24,12 @@ namespace FindReference.Editor.Engine
 
         private void UpdateProgress(float value)
         {
-            EventCenter.Instance.Publish(FEventType.GetFilesTask, value);
+            EventCenter.Instance.Publish(FEventType.GetFilesTask, new TaskProgressUpdateEvent()
+            {
+                OldProgress = _progress,
+                NewProgress = value
+            });
+            _progress = value;
         }
 
         private List<string> GenerateFileList(string directory, List<string> whiteList)

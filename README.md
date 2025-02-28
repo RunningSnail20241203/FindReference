@@ -1,6 +1,11 @@
 ﻿Find Reference
+
+v1.2.0:
+    Fix the progress bar for refreshing the cache, refactor the event hub, and optimize the logs
+    
 v1.1.0:
-    refract code
+    refactor code
+
 v1.0.3:
     fix Exception can't be try catch in Task
 
