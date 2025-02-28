@@ -1,6 +1,9 @@
 ﻿# FindReference
 查找Unity的资源的引用关系
 
+v1.1.0:
+    重构代码
+
 v1.0.3:
     修复Task中异常没有catch的问题
 

@@ -1,10 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Threading;
+using FindReference.Editor.Common;
+using FindReference.Editor.Engine;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-namespace FindReference.Editor
+// ReSharper disable once CheckNamespace
+namespace FindReference.Editor.View
 {
     public class FindReferenceWindow : EditorWindow
     {
@@ -33,6 +36,7 @@ namespace FindReference.Editor
         #region Private Data
 
         private Vector2 _scrollPos;
+        private CancellationTokenSource _cancellationTokenSource;
 
         #endregion
 
@@ -45,6 +49,18 @@ namespace FindReference.Editor
             GUILayout.EndScrollView();
         }
 
+        private void OnEnable()
+        {
+            EventCenter.Instance.Register<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
+            EventCenter.Instance.Register<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
+        }
+
+        private void OnDisable()
+        {
+            EventCenter.Instance.UnRegister<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
+            EventCenter.Instance.UnRegister<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
+        }
+
         #endregion
 
 
@@ -53,7 +69,6 @@ namespace FindReference.Editor
         private void DrawWindow()
         {
             DrawRefreshBtn();
-            DrawSaveBtn();
 
             var obj = Selection.activeObject;
             if (obj == null)
@@ -72,7 +87,7 @@ namespace FindReference.Editor
 
         private void DrawReferencesList(string guid)
         {
-            var refs = FindReferenceCore.Instance.QueryReferences(guid);
+            var refs = FindReferenceCore.Instance.QueryParents(guid);
             GUILayout.Label($"被{refs.Count}个资源直接引用");
 
             DrawObjectList(refs);
@@ -80,7 +95,7 @@ namespace FindReference.Editor
 
         private void DrawDependenciesList(string guid)
         {
-            var refs = FindReferenceCore.Instance.QueryDependencies(guid);
+            var refs = FindReferenceCore.Instance.QueryChildren(guid);
             GUILayout.Label($"直接引用了{refs.Count}个资源");
 
             DrawObjectList(refs);
@@ -108,9 +123,18 @@ namespace FindReference.Editor
             var text = FindReferenceCore.Instance.IsWorking ? GetWorkingText() : "重建引用数据库";
             if (!FindReferenceCore.Instance.IsWorking)
             {
+               
                 if (GUILayout.Button(text))
                 {
-                    FindReferenceCore.Instance.RefreshDataBase();
+                     FindReferenceCore.Instance.RefreshDataBase();
+
+                     EventCenter.Instance.Register<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
+                     EventCenter.Instance.Register<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
+                }
+                else
+                {
+                    EventCenter.Instance.UnRegister<float>(FEventType.GetFilesTask, OnGetFilesTaskProgress);
+                    EventCenter.Instance.UnRegister<float>(FEventType.ParseTask, OnParseReferencesTaskProgress);
                 }
             }
             else
@@ -126,11 +150,23 @@ namespace FindReference.Editor
             }
         }
 
-        private void DrawSaveBtn()
+        #endregion
+
+        #region Listener Callback
+
+        private void OnGetFilesTaskProgress(float progress)
         {
-            if (GUILayout.Button("保存缓存到磁盘"))
+            if (EditorUtility.DisplayCancelableProgressBar("正在搜集文件列表", "", progress))
             {
-                FindReferenceCore.Instance.Save();
+                _cancellationTokenSource.Cancel();
+            }
+        }
+
+        private void OnParseReferencesTaskProgress(float progress)
+        {
+            if (EditorUtility.DisplayCancelableProgressBar("正在解析文件引用关系", "", progress))
+            {
+                _cancellationTokenSource.Cancel();
             }
         }
 

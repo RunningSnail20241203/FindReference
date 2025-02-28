@@ -1,13 +1,14 @@
 ﻿using UnityEngine;
 
-namespace FindReference.Editor
+// ReSharper disable once CheckNamespace
+namespace FindReference.Editor.Common
 {
-    public class FindReferenceLogger
+    public static class FindReferenceLogger
     {
-        private static bool _isEnableLog = true;
+        private const bool IsEnableLog = true;
         public static void Log(string msg)
         {
-            if (_isEnableLog)
+            if (IsEnableLog)
             {
                 Debug.Log($"【FindReference】：{msg}");
             }
@@ -15,7 +16,7 @@ namespace FindReference.Editor
 
         public static void LogError(string msg)
         {
-            if (_isEnableLog)
+            if (IsEnableLog)
             {
                 Debug.LogError($"【FindReference】：{msg}");
             }

@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
+using FindReference.Editor.Common;
+using FindReference.Editor.Engine;
 using UnityEditor;
-using UnityEngine;
 
-namespace FindReference.Editor
+// ReSharper disable once CheckNamespace
+namespace FindReference.Editor.Watcher
 {
     [InitializeOnLoad]
     public class FindReferenceAssetPostProcessor : AssetPostprocessor

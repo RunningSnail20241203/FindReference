@@ -1,7 +1,9 @@
-﻿using UnityEditor;
+﻿using FindReference.Editor.Engine;
+using UnityEditor;
 using UnityEngine;
 
-namespace FindReference.Editor
+// ReSharper disable once CheckNamespace
+namespace FindReference.Editor.View
 {
     public static class FindReferenceProjectEditor
     {
@@ -15,7 +17,7 @@ namespace FindReference.Editor
             };
             EditorApplication.projectWindowItemOnGUI = (guid, selectionRect) =>
             {
-                var count = FindReferenceCore.Instance.QueryReferencesCount(guid);
+                var count = FindReferenceCore.Instance.QueryParentsCount(guid);
                 if (count == 0) return;
                 selectionRect.x -= 13f;
                 selectionRect.y += 3f;
