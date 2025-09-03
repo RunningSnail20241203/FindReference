@@ -47,6 +47,7 @@ namespace FindReference.Editor.Data
                     UpdateChildRelation(value);
                 }
                 _isDirty = true;
+                Save();
             }
         }
 
