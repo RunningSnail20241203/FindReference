@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using FindReference.Editor.Config;
+using System.Collections.Generic;
 using System.Threading;
-using FindReference.Editor.Common;
 using FindReference.Editor.Engine;
 using FindReference.Editor.EventListener;
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -13,7 +15,6 @@ namespace FindReference.Editor.View
     public class FindReferenceWindow : EditorWindow
     {
         #region Menu Commands
-
         [MenuItem("Window/FindReference")]
         public static void ShowWindow()
         {
@@ -31,33 +32,28 @@ namespace FindReference.Editor.View
         {
             EditorUtility.ClearProgressBar();
         }
-
         #endregion
 
         #region Private Data
-
         private Vector2 _scrollPos;
         private CancellationTokenSource _cancellationTokenSource;
-
         #endregion
 
         #region Unity Override Methods
-
         private void OnGUI()
         {
             _scrollPos = GUILayout.BeginScrollView(_scrollPos);
             DrawWindow();
             GUILayout.EndScrollView();
         }
-
         #endregion
 
 
         #region Private Methods
-
         private void DrawWindow()
         {
             DrawRefreshBtn();
+            DrawDebugBtn();
 
             var obj = Selection.activeObject;
             if (obj == null)
@@ -112,15 +108,14 @@ namespace FindReference.Editor.View
             var text = FindReferenceCore.Instance.IsWorking ? GetWorkingText() : "重建引用数据库";
             if (!FindReferenceCore.Instance.IsWorking)
             {
-               
                 if (GUILayout.Button(text))
                 {
-                     EditorApplication.update += EventCenter.Instance.Update;
-                     EventCenter.Instance.Register(FEventType.GetFilesTask, OnGetFilesTaskProgress);
-                     EventCenter.Instance.Register(FEventType.ParseTask, OnParseReferencesTaskProgress);
-                     EventCenter.Instance.Register(FEventType.TaskEnd, OnTaskEnd);
-                     
-                     FindReferenceCore.Instance.RefreshDataBase();
+                    EditorApplication.update += EventCenter.Instance.Update;
+                    EventCenter.Instance.Register(FEventType.GetFilesTask, OnGetFilesTaskProgress);
+                    EventCenter.Instance.Register(FEventType.ParseTask, OnParseReferencesTaskProgress);
+                    EventCenter.Instance.Register(FEventType.TaskEnd, OnTaskEnd);
+
+                    FindReferenceCore.Instance.RefreshDataBase();
                 }
             }
             else
@@ -136,15 +131,44 @@ namespace FindReference.Editor.View
             }
         }
 
+        private void DrawDebugBtn()
+        {
+            if (!GUILayout.Button("打印所有文件名后缀")) return;
 
+            var extSet = new HashSet<string>();
+            var filePaths = new Dictionary<string, string>();
+            var paths = AssetDatabase.GetAllAssetPaths();
+            foreach (var path in paths)
+            {
+                if (!FilterPath(path, FindReferenceConfig.PathPrefixes)) continue;
+
+                var ext = Path.GetExtension(path);
+                var ok = extSet.Add(ext);
+                if (ok) filePaths.Add(ext, path);
+            }
+
+            Debug.Log("文件名后缀如下:");
+            foreach (var ext in extSet)
+            {
+                Debug.Log($"{ext}:{filePaths[ext]}");
+            }
+
+            Debug.Log("文件名后缀如上:");
+
+            return;
+
+            bool FilterPath(string path, List<string> prefix)
+            {
+                return prefix.Any(path.StartsWith) && File.Exists(path);
+            }
+        }
         #endregion
 
         #region Listener Callback
-
         private void OnGetFilesTaskProgress(BaseEventData evt)
         {
             if (evt is not TaskProgressUpdateEvent evt1) return;
-            
+
             // FindReferenceLogger.Log($"OnGetFilesTaskProgress:{evt1.NewProgress}");
             if (EditorUtility.DisplayCancelableProgressBar("正在搜集文件列表", "", evt1.NewProgress))
             {
@@ -170,7 +194,6 @@ namespace FindReference.Editor.View
             EditorApplication.update -= EventCenter.Instance.Update;
             EventCenter.Instance.Clear();
         }
-
         #endregion
     }
 }
