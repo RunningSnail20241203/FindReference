@@ -142,9 +142,10 @@ namespace FindReference.Editor.Engine
 
         private async void UpdateCacheSilent(List<string> processFiles)
         {
-            var startTime = EditorApplication.timeSinceStartup;
+            double startTime = 0;
             try
             {
+                startTime = EditorApplication.timeSinceStartup;
                 processFiles = Filter(processFiles.ToArray(), _fileContainGuid, true);
 
                 if (processFiles.Count == 0)
@@ -153,9 +154,9 @@ namespace FindReference.Editor.Engine
                     return;
                 }
 
-                var refDatas = await new ParseReferenceTask(processFiles).Start();
+                var refData = await new ParseReferenceTask(processFiles).Start();
 
-                _dataBase.UpdateData(refDatas);
+                _dataBase.UpdateData(refData);
             }
             catch (Exception e)
             {
@@ -169,20 +170,21 @@ namespace FindReference.Editor.Engine
 
         private async void RefreshCache(CancellationToken token)
         {
-            var reGeTime = EditorApplication.timeSinceStartup;
-            IsWorking = true;
+            double reGeTime = 0;
             try
             {
+                IsWorking = true;
+                reGeTime = EditorApplication.timeSinceStartup;
                 var processFiles = await new GetFilePathListTask(
                     Application.dataPath,
                     _fileContainGuid,
                     token
                 ).CustomTask;
-                var refDatas = await new ParseReferenceTask(
+                var refData = await new ParseReferenceTask(
                     processFiles,
                     token).Start();
 
-                _dataBase.SetData(refDatas);
+                _dataBase.SetData(refData);
             }
             catch (OperationCanceledException)
             {
