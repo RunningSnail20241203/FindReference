@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using FindReference.Editor.Common;
 using FindReference.Editor.Config;
 using FindReference.Editor.Data;
@@ -143,7 +142,7 @@ namespace FindReference.Editor.Engine
             try
             {
                 startTime = EditorApplication.timeSinceStartup;
-                processFiles = Filter(processFiles.ToArray(), FindReferenceConfig.FileExtList, true);
+                processFiles = Filter(processFiles.ToArray(), true);
 
                 if (processFiles.Count == 0)
                 {
@@ -173,7 +172,7 @@ namespace FindReference.Editor.Engine
             {
                 IsWorking = true;
                 reGeTime = EditorApplication.timeSinceStartup;
-                var processFiles = await new GetFilePathListTask(Application.dataPath, FindReferenceConfig.FileExtList)
+                var processFiles = await new GetFilePathListTask(Application.dataPath)
                     .CustomTask;
                 var refData = await new ParseReferenceTask(processFiles).CustomTask;
 
@@ -195,13 +194,13 @@ namespace FindReference.Editor.Engine
             }
         }
 
-        private static List<string> Filter(string[] files, List<string> whiteList, bool filterPrefix)
+        private static List<string> Filter(string[] files, bool filterPrefix)
         {
             var filePaths = (
                 from file in files
                 where !filterPrefix || FindReferenceConfig.PathPrefixes.Any(file.StartsWith)
                 let extension = Path.GetExtension(file)
-                where whiteList?.Contains(extension) ?? true
+                where FindReferenceConfig.IsSupportedExtension(extension)
                 select file
             ).ToList();
 

@@ -5,8 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FindReference.Editor.Config;
 using FindReference.Editor.EventListener;
-using UnityEngine;
 
 namespace FindReference.Editor.Engine
 {
@@ -14,9 +14,9 @@ namespace FindReference.Editor.Engine
     {
         public Task<List<string>> CustomTask { get; }
 
-        public GetFilePathListTask(string path, List<string> fileContainGuid)
+        public GetFilePathListTask(string path)
         {
-            CustomTask = Task.Run(() => GenerateFileList(path, fileContainGuid));
+            CustomTask = Task.Run(() => GenerateFileList(path));
         }
 
         private const float GetFilesProgress = 0.5f;
@@ -32,7 +32,7 @@ namespace FindReference.Editor.Engine
             _progress = value;
         }
 
-        private List<string> GenerateFileList(string directory, List<string> whiteList)
+        private List<string> GenerateFileList(string directory)
         {
             UpdateProgress(0f);
             
@@ -49,7 +49,7 @@ namespace FindReference.Editor.Engine
             Parallel.ForEach(files, parallelOptions, (file, state) =>
             {
                 var extension = Path.GetExtension(file).ToLowerInvariant();
-                if (whiteList?.Contains(extension) ?? true)
+                if (FindReferenceConfig.IsSupportedExtension(extension))
                 {
                     result.Add(file);
                     // Debug.Log($"Added file: {file}");

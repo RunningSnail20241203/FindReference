@@ -10,7 +10,6 @@ using FindReference.Editor.Common;
 using FindReference.Editor.Config;
 using FindReference.Editor.Data;
 using FindReference.Editor.EventListener;
-using UnityEngine;
 
 namespace FindReference.Editor.Engine
 {
