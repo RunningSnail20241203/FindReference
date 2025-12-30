@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using FindReference.Editor.Common;
 using UnityEditor;
@@ -46,6 +47,7 @@ namespace FindReference.Editor.Data
                 {
                     UpdateChildRelation(value);
                 }
+
                 _isDirty = true;
                 Save();
             }
@@ -64,20 +66,21 @@ namespace FindReference.Editor.Data
                 {
                     _isDirty |= DeleteChildRelation(dataInDict);
                 }
+
                 _isDirty |= UpdateChildRelation(data);
             }
         }
 
-        public List<string> QueryParents(string guid)
+        public string[] QueryParents(string guid)
         {
             var ok = _referenceDict.TryGetValue(guid, out var data);
-            return ok ? data.Parents : new List<string>();
+            return ok ? data.ParentSet.ToArray() : Array.Empty<string>();
         }
 
-        public List<string> QueryChildren(string guid)
+        public string[] QueryChildren(string guid)
         {
             var ok = _referenceDict.TryGetValue(guid, out var data);
-            return ok ? data.Children : new List<string>();
+            return ok ? data.ChildrenSet.ToArray() : Array.Empty<string>();
         }
 
         public void Initialize()
@@ -153,7 +156,7 @@ namespace FindReference.Editor.Data
         private bool UpdateChildRelation(FindReferenceData node)
         {
             var dirty = false;
-            node.Children.ForEach(x =>
+            foreach (var x in node.ChildrenSet)
             {
                 if (_referenceDict.TryGetValue(x, out var data))
                 {
@@ -169,7 +172,7 @@ namespace FindReference.Editor.Data
                     _referenceDict.TryAdd(x, newData);
                     dirty = true;
                 }
-            });
+            }
             return dirty;
         }
 
@@ -180,13 +183,14 @@ namespace FindReference.Editor.Data
         private bool DeleteChildRelation(FindReferenceData data)
         {
             var dirty = false;
-            foreach (var childGuid in data.Children)
+            foreach (var childGuid in data.ChildrenSet)
             {
                 if (_referenceDict.TryGetValue(childGuid, out var child))
                 {
                     dirty |= child.DeleteParent(data.Guid);
                 }
             }
+
             return dirty;
         }
 
@@ -196,7 +200,7 @@ namespace FindReference.Editor.Data
         /// <param name="data"></param>
         private void DeleteParentRelation(FindReferenceData data)
         {
-            foreach (var parentGuid in data.Parents)
+            foreach (var parentGuid in data.ParentSet)
             {
                 if (_referenceDict.TryGetValue(parentGuid, out var parent))
                 {

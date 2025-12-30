@@ -9,7 +9,6 @@ using FindReference.Editor.EventListener;
 using UnityEditor;
 using UnityEngine;
 
-// ReSharper disable once CheckNamespace
 namespace FindReference.Editor.Engine
 {
     public class FindReferenceCore
@@ -54,13 +53,14 @@ namespace FindReference.Editor.Engine
         /// </summary>
         /// <param name="guid"></param>
         /// <returns></returns>
-        public List<string> QueryParents(string guid)
+        public string[] QueryParents(string guid)
         {
             if (!IsInitialized())
             {
                 FindReferenceLogger.LogError("初始化失败！");
-                return new List<string>();
+                return Array.Empty<string>();
             }
+
             var ret = _dataBase.QueryParents(guid);
             return ret;
         }
@@ -72,7 +72,7 @@ namespace FindReference.Editor.Engine
         /// <returns></returns>
         public int QueryParentsCount(string guid)
         {
-            return QueryParents(guid).Count;
+            return QueryParents(guid).Length;
         }
 
         /// <summary>
@@ -80,12 +80,12 @@ namespace FindReference.Editor.Engine
         /// </summary>
         /// <param name="guid"></param>
         /// <returns></returns>
-        public List<string> QueryChildren(string guid)
+        public string[] QueryChildren(string guid)
         {
             if (!IsInitialized())
             {
                 FindReferenceLogger.Log("初始化失败！");
-                return new List<string>();
+                return Array.Empty<string>();
             }
 
             return _dataBase.QueryChildren(guid);
@@ -94,19 +94,15 @@ namespace FindReference.Editor.Engine
         /// <summary>
         /// 重建整个缓存 todo 优化搜集文件列表的性能
         /// </summary>
-        public CancellationTokenSource RefreshDataBase()
+        public void RefreshDataBase()
         {
             if (!IsInitialized())
             {
                 FindReferenceLogger.Log("初始化失败！");
-                return null;
+                return;
             }
 
-            var cancellationTokenSource = new CancellationTokenSource();
-
-            RefreshCache(cancellationTokenSource.Token);
-
-            return cancellationTokenSource;
+            RefreshCache();
         }
 
         /// <summary>
@@ -154,7 +150,7 @@ namespace FindReference.Editor.Engine
                     return;
                 }
 
-                var refData = await new ParseReferenceTask(processFiles).Start();
+                var refData = await new ParseReferenceTask(processFiles).CustomTask;
 
                 _dataBase.UpdateData(refData);
             }
@@ -164,26 +160,21 @@ namespace FindReference.Editor.Engine
             }
             finally
             {
-                FindReferenceLogger.Log($"处理 {processFiles.Count} 个资源完毕, 耗时：{EditorApplication.timeSinceStartup - startTime}s");
+                FindReferenceLogger.Log(
+                    $"处理 {processFiles.Count} 个资源完毕, 耗时：{EditorApplication.timeSinceStartup - startTime}s");
             }
         }
 
-        private async void RefreshCache(CancellationToken token)
+        private async void RefreshCache()
         {
             double reGeTime = 0;
             try
             {
                 IsWorking = true;
                 reGeTime = EditorApplication.timeSinceStartup;
-                var processFiles = await new GetFilePathListTask(
-                    Application.dataPath,
-                    _fileContainGuid,
-                    token
-                ).CustomTask;
-                var refData = await new ParseReferenceTask(
-                    processFiles,
-                    token).Start();
-
+                var processFiles = await new GetFilePathListTask(Application.dataPath, _fileContainGuid).CustomTask;
+                var refData = await new ParseReferenceTask(processFiles).CustomTask;
+                
                 _dataBase.SetData(refData);
             }
             catch (OperationCanceledException)
@@ -228,6 +219,7 @@ namespace FindReference.Editor.Engine
                 FindReferenceLogger.LogError("没有配置FindReferenceDataBase的路径");
                 return;
             }
+
             _dataBase.Initialize();
         }
 

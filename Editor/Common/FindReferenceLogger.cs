@@ -1,6 +1,5 @@
 ﻿using UnityEngine;
 
-// ReSharper disable once CheckNamespace
 namespace FindReference.Editor.Common
 {
     public static class FindReferenceLogger

@@ -1,26 +1,26 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FindReference.Editor.EventListener;
+using UnityEngine;
 
-// ReSharper disable once CheckNamespace
 namespace FindReference.Editor.Engine
 {
     public class GetFilePathListTask
     {
         public Task<List<string>> CustomTask { get; }
 
-        public GetFilePathListTask(string path, List<string> fileContainGuid, CancellationToken token)
+        public GetFilePathListTask(string path, List<string> fileContainGuid)
         {
-            _token = token;
-            CustomTask = Task.Run(() => GenerateFileList(path, fileContainGuid), token);
+            CustomTask = Task.Run(() => GenerateFileList(path, fileContainGuid));
         }
 
-        private const string PathPrefix = "Assets/";
         private const float GetFilesProgress = 0.5f;
         private float _progress;
-        private readonly CancellationToken _token;
 
         private void UpdateProgress(float value)
         {
@@ -35,36 +35,39 @@ namespace FindReference.Editor.Engine
         private List<string> GenerateFileList(string directory, List<string> whiteList)
         {
             UpdateProgress(0f);
+            
+            var result = new ConcurrentBag<string>();
             // 获取所有文件
             var files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
+            var parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount
+            };
+            var totalFiles = files.Length;
+            var processedCount = 0;
 
-            UpdateProgress(GetFilesProgress);
-
-            return Filter(files, whiteList, false);
+            Parallel.ForEach(files, parallelOptions, (file, state) =>
+            {
+                var extension = Path.GetExtension(file).ToLowerInvariant();
+                if (whiteList?.Contains(extension) ?? true)
+                {
+                    result.Add(file);
+                    // Debug.Log($"Added file: {file}");
+                }
+                
+                // 线程安全的进度更新
+                var newProcessed = Interlocked.Increment(ref processedCount);
+                TryUpdateProgress(newProcessed, totalFiles);
+            });
+            
+            return result.ToList();
         }
 
-        private List<string> Filter(string[] files, List<string> whiteList, bool filterPrefix)
+        private void TryUpdateProgress(int newProcessed, int totalFiles)
         {
-            var result = new List<string>();
-            var totalFiles = files.Length;
-            for (var i = 0; i < totalFiles; i++)
-            {
-                _token.ThrowIfCancellationRequested();
-                
-                var file = files[i];
-                if (!filterPrefix || file.StartsWith(PathPrefix))
-                {
-                    var extension = Path.GetExtension(file);
-                    if (whiteList?.Contains(extension) ?? true)
-                    {
-                        result.Add(file);
-                    }
-                }
-                // 计算并报告进度
-                var value = GetFilesProgress + (float)(i + 1) / totalFiles * (1 - GetFilesProgress);
-                UpdateProgress(value);
-            }
-            return result;
+            if (newProcessed % 100 != 0) return; // 每100个文件更新一次进度，减少UI开销
+            var progress = GetFilesProgress + (float)newProcessed / totalFiles * (1 - GetFilesProgress);
+            UpdateProgress(progress);
         }
     }
 }

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// ReSharper disable once CheckNamespace
 namespace FindReference.Editor.Data
 {
     [Serializable]
@@ -12,18 +11,22 @@ namespace FindReference.Editor.Data
         #region Private Data
 
         [SerializeField] private string guid;
-        [SerializeField] private List<string> children = new();
-        [SerializeField] private List<string> parents = new();
+        [SerializeField] private string[] serializedChildren;
+        [SerializeField] private string[] serializedParents;
 
         [NonSerialized] private HashSet<string> _childrenSet = new();
         [NonSerialized] private HashSet<string> _parentsSet = new();
+
+
+        private bool _childrenDirty;
+        private bool _parentsDirty;
 
         #endregion
 
         #region Properties
 
-        public List<string> Children => children;
-        public List<string> Parents => parents;
+        public HashSet<string> ChildrenSet => _childrenSet;
+        public HashSet<string> ParentSet => _parentsSet;
         public string Guid => guid;
 
         #endregion
@@ -35,64 +38,97 @@ namespace FindReference.Editor.Data
             this.guid = guid;
         }
 
-        public FindReferenceData(string guid, List<string> children, List<string> parents)
+        public FindReferenceData(string guid, string[] serializedChildren, string[] serializedParents)
         {
             this.guid = guid;
-            if (children != null)
+            if (serializedChildren != null)
             {
-                _childrenSet = new HashSet<string>(children);
-                this.children = children;
+                _childrenSet = new HashSet<string>(serializedChildren);
+                _childrenDirty = true;
             }
 
-            if (parents != null)
+            if (serializedParents != null)
             {
-                _parentsSet = new HashSet<string>(parents);
-                this.parents = parents;
+                _parentsSet = new HashSet<string>(serializedParents);
+                _parentsDirty = true;
             }
         }
 
         public bool AddChild(string child)
         {
             if (!_childrenSet.Add(child)) return false;
-
-            children.Add(child);
+            // 延迟序列化更新，只在需要时重建数组
+            _childrenDirty = true;
             return true;
         }
 
         public bool DeleteChild(string child)
         {
-            return _childrenSet.Remove(child) && children.Remove(child);
+            if (!_childrenSet.Remove(child)) return false;
+            _childrenDirty = true;
+            return true;
         }
 
         public bool AddParent(string parent)
         {
             if (!_parentsSet.Add(parent)) return false;
-
-            parents.Add(parent);
+            _parentsDirty = true;
             return true;
         }
 
         public bool DeleteParent(string parent)
         {
-            return _parentsSet.Remove(parent) && parents.Remove(parent);
+            if (!_parentsSet.Remove(parent)) return false;
+            _parentsDirty = true;
+            return true;
         }
 
         public void ClearParents()
         {
             _parentsSet.Clear();
-            parents.Clear();
+            _parentsDirty = true;
         }
 
         public void OnBeforeSerialize()
         {
-            parents = _parentsSet.ToList();
-            children = _childrenSet.ToList();
+            TrySaveChildren();
+            TrySaveParents();
         }
 
         public void OnAfterDeserialize()
         {
-            _parentsSet = new HashSet<string>(parents);
-            _childrenSet = new HashSet<string>(children);
+            TryLoadChildren();
+            TryLoadParents();
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        private void TrySaveChildren()
+        {
+            if (!_childrenDirty) return;
+            serializedChildren = _childrenSet.ToArray();
+            _childrenDirty = false;
+        }
+
+        private void TrySaveParents()
+        {
+            if (!_parentsDirty) return;
+            serializedParents = _parentsSet.ToArray();
+            _parentsDirty = false;
+        }
+
+        private void TryLoadChildren()
+        {
+            if (serializedChildren == null) return;
+            _childrenSet = new HashSet<string>(serializedChildren);
+        }
+
+        private void TryLoadParents()
+        {
+            if (serializedParents == null) return;
+            _parentsSet = new HashSet<string>(serializedParents);
         }
 
         #endregion

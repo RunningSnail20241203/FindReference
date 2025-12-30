@@ -3,7 +3,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-// ReSharper disable once CheckNamespace
 namespace FindReference.Editor
 {
     [FilePath(AssetPath, FilePathAttribute.Location.ProjectFolder)]

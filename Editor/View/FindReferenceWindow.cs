@@ -1,4 +1,5 @@
-﻿using FindReference.Editor.Config;
+﻿using System;
+using FindReference.Editor.Config;
 using System.Collections.Generic;
 using System.Threading;
 using FindReference.Editor.Engine;
@@ -73,7 +74,7 @@ namespace FindReference.Editor.View
         private void DrawReferencesList(string guid)
         {
             var refs = FindReferenceCore.Instance.QueryParents(guid);
-            GUILayout.Label($"被{refs.Count}个资源直接引用");
+            GUILayout.Label($"被{refs.Length}个资源直接引用");
 
             DrawObjectList(refs);
         }
@@ -81,14 +82,14 @@ namespace FindReference.Editor.View
         private void DrawDependenciesList(string guid)
         {
             var refs = FindReferenceCore.Instance.QueryChildren(guid);
-            GUILayout.Label($"直接引用了{refs.Count}个资源");
+            GUILayout.Label($"直接引用了{refs.Length}个资源");
 
             DrawObjectList(refs);
         }
 
-        private static void DrawObjectList(List<string> guids)
+        private static void DrawObjectList(string[] guids)
         {
-            guids.ForEach(x =>
+            Array.ForEach(guids,x =>
             {
                 var path = AssetDatabase.GUIDToAssetPath(x);
                 var obj = AssetDatabase.LoadAssetAtPath<Object>(path);
