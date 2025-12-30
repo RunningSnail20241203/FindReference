@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using FindReference.Editor.Common;
+using FindReference.Editor.Config;
 using FindReference.Editor.Data;
 using FindReference.Editor.EventListener;
 using UnityEngine;
@@ -21,7 +22,7 @@ namespace FindReference.Editor.Engine
         }
 
         public Task<List<FindReferenceData>> CustomTask { get; }
-        private static readonly Regex Regex = new("(?:m_AssetGUID|guid|value): ([0-9a-f]{32})");
+        // private static readonly Regex Regex = new("(?:m_AssetGUID|guid|value): ([0-9a-f]{32})");
 
         private float _progress;
 
@@ -83,7 +84,7 @@ namespace FindReference.Editor.Engine
             var set = new HashSet<string>(); // 记录依赖集合
             using var sr = new StreamReader(file);
             var content = sr.ReadToEnd();
-            var matches = Regex.Matches(content);
+            var matches = FindReferenceConfig.FindGuidRegex.Matches(content);
             foreach (Match match in matches)
             {
                 set.Add(match.Groups[1].Value);

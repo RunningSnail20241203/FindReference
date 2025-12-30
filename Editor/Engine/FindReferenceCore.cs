@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using FindReference.Editor.Common;
+using FindReference.Editor.Config;
 using FindReference.Editor.Data;
 using FindReference.Editor.EventListener;
 using UnityEditor;
@@ -15,10 +16,10 @@ namespace FindReference.Editor.Engine
     {
         #region Private Data
 
-        private readonly List<string> _fileContainGuid =
-            new() { ".prefab", ".unity", ".mat", ".anim", ".asset", ".controller" };
+        // private readonly List<string> _fileContainGuid =
+        //     new() { ".prefab", ".unity", ".mat", ".anim", ".asset", ".controller" };
 
-        private const string PathPrefix = "Assets/";
+        // private const string PathPrefix = "Assets/";
 
         private FindReferenceDataBase _dataBase;
         private static FindReferenceCore _instance;
@@ -142,7 +143,7 @@ namespace FindReference.Editor.Engine
             try
             {
                 startTime = EditorApplication.timeSinceStartup;
-                processFiles = Filter(processFiles.ToArray(), _fileContainGuid, true);
+                processFiles = Filter(processFiles.ToArray(), FindReferenceConfig.FileExtList, true);
 
                 if (processFiles.Count == 0)
                 {
@@ -172,9 +173,10 @@ namespace FindReference.Editor.Engine
             {
                 IsWorking = true;
                 reGeTime = EditorApplication.timeSinceStartup;
-                var processFiles = await new GetFilePathListTask(Application.dataPath, _fileContainGuid).CustomTask;
+                var processFiles = await new GetFilePathListTask(Application.dataPath, FindReferenceConfig.FileExtList)
+                    .CustomTask;
                 var refData = await new ParseReferenceTask(processFiles).CustomTask;
-                
+
                 _dataBase.SetData(refData);
             }
             catch (OperationCanceledException)
@@ -197,7 +199,7 @@ namespace FindReference.Editor.Engine
         {
             var filePaths = (
                 from file in files
-                where !filterPrefix || file.StartsWith(PathPrefix)
+                where !filterPrefix || FindReferenceConfig.PathPrefixes.Any(file.StartsWith)
                 let extension = Path.GetExtension(file)
                 where whiteList?.Contains(extension) ?? true
                 select file
