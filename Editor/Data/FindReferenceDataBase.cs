@@ -13,7 +13,7 @@ namespace FindReference.Editor.Data
     {
         #region Private Data
 
-        [SerializeField] private List<FindReferenceData> datas = new();
+        [SerializeField] private List<FindReferenceData> dataList = new();
         private readonly Dictionary<string, FindReferenceData> _referenceDict = new();
         private const string AssetPath = "Library/FindReference/FindReferenceDataBase.asset";
         private bool _isDirty;
@@ -44,10 +44,8 @@ namespace FindReference.Editor.Data
                 var values = _referenceDict.Values.ToList();
                 foreach (var value in values)
                 {
-                    UpdateChildRelation(value);
+                    _isDirty |= UpdateChildRelation(value);
                 }
-
-                _isDirty = true;
                 Save();
             }
         }
@@ -56,18 +54,20 @@ namespace FindReference.Editor.Data
         {
             foreach (var data in referenceArr)
             {
-                if (!_referenceDict.TryGetValue(data.Guid, out var dataInDict))
+                if (_referenceDict.TryGetValue(data.Guid, out var dataInDict))
+                {
+                    _isDirty |= DeleteChildRelation(dataInDict);
+                }
+                else
                 {
                     _referenceDict.Add(data.Guid, data);
                     _isDirty = true;
                 }
-                else
-                {
-                    _isDirty |= DeleteChildRelation(dataInDict);
-                }
 
                 _isDirty |= UpdateChildRelation(data);
             }
+            
+            Save();
         }
 
         public string[] QueryParents(string guid)
@@ -85,7 +85,7 @@ namespace FindReference.Editor.Data
         public void Initialize()
         {
             _referenceDict.Clear();
-            datas.ForEach(x => _referenceDict.TryAdd(x.Guid, x));
+            dataList.ForEach(x => _referenceDict.TryAdd(x.Guid, x));
         }
 
         public void DeleteAsset(string guid)
@@ -104,12 +104,13 @@ namespace FindReference.Editor.Data
                     _isDirty |= kv.Value.DeleteChild(guid);
                 }
             }
+            Save();
         }
 
         public void Clear()
         {
             _referenceDict.Clear();
-            datas.Clear();
+            dataList.Clear();
             _isDirty = true;
         }
 
@@ -120,10 +121,9 @@ namespace FindReference.Editor.Data
         protected override void Save(bool saveAsText)
         {
             var saveTime = EditorApplication.timeSinceStartup;
-            datas = _referenceDict.Values.ToList();
+            dataList = _referenceDict.Values.ToList();
 
             base.Save(saveAsText);
-            _isDirty = false;
             FindReferenceLogger.Log($"保存引用缓存,用时：{EditorApplication.timeSinceStartup - saveTime}s");
         }
 
@@ -145,6 +145,7 @@ namespace FindReference.Editor.Data
         private void Save()
         {
             if (!_isDirty) return;
+            _isDirty = false;
             Save(true);
         }
 
@@ -207,7 +208,7 @@ namespace FindReference.Editor.Data
                 }
             }
         }
-
+        
         #endregion
     }
 }
