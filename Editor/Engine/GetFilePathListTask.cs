@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FindReference.Editor.Config;
 using FindReference.Editor.EventListener;
+using FindReference.Editor.Common;
 
 namespace FindReference.Editor.Engine
 {
