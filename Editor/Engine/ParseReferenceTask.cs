@@ -67,6 +67,9 @@ namespace FindReference.Editor.Engine
                     () => new List<FindReferenceData>(),  // localInit: 每线程本地 List
                     (file, state, localList) =>           // body
                     {
+                        // 主动检查取消令牌，使取消能立即生效
+                        cancellationToken.ThrowIfCancellationRequested();
+
                         try
                         {
                             var data = ParseOneFile(
@@ -114,7 +117,7 @@ namespace FindReference.Editor.Engine
 
         private void TryUpdateProgress(int newProcessed, int totalFiles)
         {
-            if (newProcessed % 100 != 0) return; // 每100个文件更新一次进度，减少UI开销
+            if (newProcessed % 1000 != 0) return; // 改为每1000个文件更新一次，减少UI抖动
             var progress = (float)newProcessed / totalFiles;
             UpdateProgress(progress);
         }
