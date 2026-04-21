@@ -206,7 +206,9 @@ namespace FindReference.Editor.Engine
         private string ConvertPath2Guid(string s)
         {
             var metaPath = s + ".meta";
-            if (!File.Exists(metaPath))
+            var fullPath = metaPath.Length > 248 ? $"\\\\?\\{Path.GetFullPath(metaPath)}" : metaPath;
+
+            if (!File.Exists(fullPath))
             {
                 FindReferenceLogger.LogError($".meta文件不存在: {metaPath}");
                 return null;
@@ -215,7 +217,7 @@ namespace FindReference.Editor.Engine
             try
             {
                 // FileOptions.SequentialScan 优化 OS 预读，冷启动时避免 page cache 污染
-                using var fs = new FileStream(metaPath, FileMode.Open, FileAccess.Read, FileShare.Read, 512, FileOptions.SequentialScan);
+                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 512, FileOptions.SequentialScan);
                 using var metaSr = new StreamReader(fs, System.Text.Encoding.UTF8, true, 512);
                 string line;
                 while ((line = metaSr.ReadLine()) != null)

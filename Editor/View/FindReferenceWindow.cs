@@ -37,7 +37,6 @@ namespace FindReference.Editor.View
 
         #region Private Data
         private Vector2 _scrollPos;
-        private CancellationTokenSource _cancellationTokenSource = new();
         #endregion
 
         #region Unity Override Methods
@@ -182,7 +181,7 @@ namespace FindReference.Editor.View
             // FindReferenceLogger.Log($"OnGetFilesTaskProgress:{evt1.NewProgress}");
             if (EditorUtility.DisplayCancelableProgressBar("正在搜集文件列表", "", evt1.NewProgress))
             {
-                _cancellationTokenSource?.Cancel();
+                FindReferenceCore.Instance.CancelRefresh();
             }
         }
 
@@ -193,7 +192,7 @@ namespace FindReference.Editor.View
             // FindReferenceLogger.Log($"OnParseReferencesTaskProgress:{evt1.NewProgress}");
             if (EditorUtility.DisplayCancelableProgressBar("正在解析文件引用关系", "", evt1.NewProgress))
             {
-                _cancellationTokenSource?.Cancel();
+                FindReferenceCore.Instance.CancelRefresh();
             }
         }
 

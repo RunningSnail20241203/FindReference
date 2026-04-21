@@ -116,6 +116,11 @@ namespace FindReference.Editor.Engine
             }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 
+        public void CancelRefresh()
+        {
+            _cancellationTokenSource?.Cancel();
+        }
+
         /// <summary>
         /// 后台静默处理资源引用变化
         /// </summary>
