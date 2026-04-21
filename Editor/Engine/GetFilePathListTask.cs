@@ -60,14 +60,15 @@ namespace FindReference.Editor.Engine
                         // 主动检查取消令牌，使取消能立即生效
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        var extension = Path.GetExtension(path).ToLowerInvariant();
-                        if (FindReferenceConfig.IsSupportedExtension(extension))
+                        if (!FindReferenceConfig.ExcludedPathPrefixes.Any(path.StartsWith))
                         {
-                            localList.Add(path);
+                            var extension = Path.GetExtension(path).ToLowerInvariant();
+                            if (FindReferenceConfig.IsSupportedExtension(extension))
+                                localList.Add(path);
                         }
 
-                        var newProcessed = Interlocked.Increment(ref processedCount);
-                        TryUpdateProgress(newProcessed, totalFiles);
+                        var processed = Interlocked.Increment(ref processedCount);
+                        TryUpdateProgress(processed, totalFiles);
 
                         return localList;
                     },

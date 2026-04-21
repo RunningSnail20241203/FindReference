@@ -21,10 +21,11 @@ namespace FindReference.Editor.Engine
             List<string> files,
             CancellationToken cancellationToken = default,
             IReadOnlyDictionary<string, long> mtimeCache = null,
-            IReadOnlyDictionary<string, FindReferenceData> existingData = null)
+            IReadOnlyDictionary<string, FindReferenceData> existingData = null,
+            IReadOnlyDictionary<string, string> guidMap = null)
         {
             CustomTask = Task.Run(
-                () => GenerateRefData(files, cancellationToken, mtimeCache, existingData),
+                () => GenerateRefData(files, cancellationToken, mtimeCache, existingData, guidMap),
                 cancellationToken);
         }
 
@@ -44,7 +45,8 @@ namespace FindReference.Editor.Engine
             List<string> files,
             CancellationToken cancellationToken = default,
             IReadOnlyDictionary<string, long> mtimeCache = null,
-            IReadOnlyDictionary<string, FindReferenceData> existingData = null)
+            IReadOnlyDictionary<string, FindReferenceData> existingData = null,
+            IReadOnlyDictionary<string, string> guidMap = null)
         {
             var parallelOptions = new ParallelOptions
             {
@@ -76,7 +78,8 @@ namespace FindReference.Editor.Engine
                                 file,
                                 mtimeCache,
                                 existingData,
-                                newMtimes);
+                                newMtimes,
+                                guidMap);
                             if (data != null)
                             {
                                 localList.Add(data);
@@ -134,9 +137,16 @@ namespace FindReference.Editor.Engine
             string file,
             IReadOnlyDictionary<string, long> mtimeCache,
             IReadOnlyDictionary<string, FindReferenceData> existingData,
-            ConcurrentDictionary<string, long> newMtimes)
+            ConcurrentDictionary<string, long> newMtimes,
+            IReadOnlyDictionary<string, string> guidMap = null)
         {
-            var guid = ConvertPath2Guid(file);
+            // 优先从预取字典查 GUID，避免读 .meta 文件
+            string guid;
+            if (guidMap != null && guidMap.TryGetValue(file, out var mappedGuid))
+                guid = mappedGuid;
+            else
+                guid = ConvertPath2Guid(file);
+
             if (string.IsNullOrEmpty(guid)) return null;
 
             // 方向4：mtime 检查，命中则跳过 content 解析
@@ -169,7 +179,9 @@ namespace FindReference.Editor.Engine
             var set = new HashSet<string>();
             try
             {
-                using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.SequentialScan);
+                var absPath = Path.GetFullPath(file);
+                var fullPath = absPath.Length > 248 ? $"\\\\?\\{absPath}" : absPath;
+                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.SequentialScan);
                 using var sr = new StreamReader(fs, System.Text.Encoding.UTF8, true, 8192);
 
                 string line;
@@ -206,7 +218,8 @@ namespace FindReference.Editor.Engine
         private string ConvertPath2Guid(string s)
         {
             var metaPath = s + ".meta";
-            var fullPath = metaPath.Length > 248 ? $"\\\\?\\{Path.GetFullPath(metaPath)}" : metaPath;
+            var absMetaPath = Path.GetFullPath(metaPath);
+            var fullPath = absMetaPath.Length > 248 ? $"\\\\?\\{absMetaPath}" : absMetaPath;
 
             if (!File.Exists(fullPath))
             {

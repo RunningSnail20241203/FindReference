@@ -49,5 +49,11 @@ namespace FindReference.Editor.Config
             "Assets",
             "Packages"
         };
+
+        public static readonly List<string> ExcludedPathPrefixes = new()
+        {
+            "Assets/ProjectSettings",
+            "ProjectSettings"
+        };
     }
 }

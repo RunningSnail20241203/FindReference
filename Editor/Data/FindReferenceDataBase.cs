@@ -2,6 +2,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using FindReference.Editor.Common;
 using UnityEditor;
 using UnityEngine;
@@ -17,6 +19,7 @@ namespace FindReference.Editor.Data
         [SerializeField] private List<FindReferenceData> dataList = new();
         [SerializeField] private List<string> mtimeFiles = new();       // mtime cache: 文件路径列表
         [SerializeField] private List<long> mtimeTicks = new();         // mtime cache: 对应的修改时间(ticks)
+        [SerializeField] private long _lastBuildTimeTicks;              // 最后一次构建数据库的时间
         private readonly ConcurrentDictionary<string, FindReferenceData> _referenceDict = new();
         private readonly object _listenersLock = new();
         private Dictionary<string, long> _mtimeCacheSnapshot;           // 缓存 mtime 字典避免每次重建
@@ -28,9 +31,12 @@ namespace FindReference.Editor.Data
 
         #region Public APIs
 
+        public DateTime LastBuildTime => _lastBuildTimeTicks == 0 ? DateTime.MinValue : new DateTime(_lastBuildTimeTicks);
+
         public void SetData(List<FindReferenceData> referenceArr, Dictionary<string, long> newMtimes = null)
         {
             var reGeTime = EditorApplication.timeSinceStartup;
+            _lastBuildTimeTicks = DateTime.Now.Ticks;
             BuildReference();
             FindReferenceLogger.Log($"重建缓存,用时：{EditorApplication.timeSinceStartup - reGeTime}s");
             return;
@@ -52,19 +58,20 @@ namespace FindReference.Editor.Data
                     }
                 });
 
-                // Phase C: 顺序应用 parent 链接（保证 HashSet<string> 写入线程安全）
-                foreach (var kvp in childToParents)
+                // Phase C: 并行应用 parent 链接，用 GetOrAdd 保证节点唯一性，各节点锁独立互不争用
+                var dirtyFlag = 0;
+                Parallel.ForEach(childToParents, kvp =>
                 {
-                    if (!_referenceDict.TryGetValue(kvp.Key, out var childNode))
+                    var childNode = _referenceDict.GetOrAdd(kvp.Key, k => new FindReferenceData(k));
+                    var changed = false;
+                    lock (childNode)
                     {
-                        childNode = new FindReferenceData(kvp.Key);
-                        _referenceDict.TryAdd(kvp.Key, childNode);
+                        foreach (var parentGuid in kvp.Value)
+                            changed |= childNode.AddParent(parentGuid);
                     }
-                    foreach (var parentGuid in kvp.Value)
-                    {
-                        _isDirty |= childNode.AddParent(parentGuid);
-                    }
-                }
+                    if (changed) Interlocked.Exchange(ref dirtyFlag, 1);
+                });
+                _isDirty |= dirtyFlag == 1;
 
                 // 更新 mtime 缓存
                 if (newMtimes != null)

@@ -32,6 +32,8 @@ namespace FindReference.Editor.Engine
 
         public bool IsWorking { get; private set; }
 
+        public FindReferenceDataBase DataBase => _dataBase;
+
         public static FindReferenceCore Instance
         {
             get
@@ -108,7 +110,16 @@ namespace FindReference.Editor.Engine
             // 方向1：主线程预取 AssetDatabase 路径，消除 Directory.GetFiles IO
             var allAssetPaths = AssetDatabase.GetAllAssetPaths();
 
-            var task = RefreshCache(allAssetPaths, _cancellationTokenSource.Token);
+            // 预取 path→guid 字典，消除后台线程读 .meta 文件的 IO
+            var guidMap = new Dictionary<string, string>(allAssetPaths.Length);
+            foreach (var p in allAssetPaths)
+            {
+                var g = AssetDatabase.AssetPathToGUID(p);
+                if (!string.IsNullOrEmpty(g))
+                    guidMap[p] = g;
+            }
+
+            var task = RefreshCache(allAssetPaths, guidMap, _cancellationTokenSource.Token);
             task.ContinueWith(t =>
             {
                 if (t.IsFaulted)
@@ -191,7 +202,7 @@ namespace FindReference.Editor.Engine
             }
         }
 
-        private async Task RefreshCache(string[] allAssetPaths, CancellationToken cancellationToken = default)
+        private async Task RefreshCache(string[] allAssetPaths, IReadOnlyDictionary<string, string> guidMap, CancellationToken cancellationToken = default)
         {
             double reGeTime = 0;
             try
@@ -210,7 +221,8 @@ namespace FindReference.Editor.Engine
                     filteredPaths,
                     cancellationToken,
                     mtimeCache,
-                    existingData).CustomTask;
+                    existingData,
+                    guidMap).CustomTask;
 
                 _dataBase.SetData(refData, newMtimes);
             }
