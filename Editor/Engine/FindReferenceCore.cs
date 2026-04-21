@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using FindReference.Editor.Common;
 using FindReference.Editor.Config;
 using FindReference.Editor.Data;
