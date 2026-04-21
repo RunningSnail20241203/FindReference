@@ -15,12 +15,20 @@ namespace FindReference.Editor.Engine
 {
     public class ParseReferenceTask
     {
-        public ParseReferenceTask(List<string> files, CancellationToken cancellationToken = default)
+        public Task<(List<FindReferenceData> data, Dictionary<string, long> mtimes)> CustomTask { get; }
+
+        public ParseReferenceTask(
+            List<string> files,
+            CancellationToken cancellationToken = default,
+            IReadOnlyDictionary<string, long> mtimeCache = null,
+            IReadOnlyDictionary<string, FindReferenceData> existingData = null)
         {
-            CustomTask = Task.Run(() => GenerateRefData(files, cancellationToken), cancellationToken);
+            CustomTask = Task.Run(
+                () => GenerateRefData(files, cancellationToken, mtimeCache, existingData),
+                cancellationToken);
         }
 
-        public Task<List<FindReferenceData>> CustomTask { get; }
+        public Task<(List<FindReferenceData>, Dictionary<string, long>)> CustomTask { get; }
         // private static readonly Regex Regex = new("(?:m_AssetGUID|guid|value): ([0-9a-f]{32})");
 
         private float _progress;
@@ -35,9 +43,12 @@ namespace FindReference.Editor.Engine
             _progress = value;
         }
 
-        private List<FindReferenceData> GenerateRefData(List<string> files, CancellationToken cancellationToken = default)
+        private (List<FindReferenceData>, Dictionary<string, long>) GenerateRefData(
+            List<string> files,
+            CancellationToken cancellationToken = default,
+            IReadOnlyDictionary<string, long> mtimeCache = null,
+            IReadOnlyDictionary<string, FindReferenceData> existingData = null)
         {
-            var result = new ConcurrentBag<FindReferenceData>();
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Environment.ProcessorCount,
@@ -45,29 +56,51 @@ namespace FindReference.Editor.Engine
             };
             var totalFiles = files.Count;
             var processedCount = 0;
+            var newMtimes = new ConcurrentDictionary<string, long>();
+
+            // 方向3：线程本地 List + 末尾合并，避免 ConcurrentBag 争用
+            var result = new List<FindReferenceData>();
+            var lockObj = new object();
+
             try
             {
-                Parallel.ForEach(files, parallelOptions, (file, state) =>
-                {
-                    try
+                Parallel.ForEach(
+                    files,
+                    parallelOptions,
+                    () => new List<FindReferenceData>(),  // localInit: 每线程本地 List
+                    (file, state, localList) =>           // body
                     {
-                        var data = ParseOneFile(file);
-                        if (data != null)
+                        try
                         {
-                            result.Add(data);
+                            var data = ParseOneFile(
+                                file,
+                                mtimeCache,
+                                existingData,
+                                newMtimes);
+                            if (data != null)
+                            {
+                                localList.Add(data);
+                            }
                         }
-                    }
-                    catch (Exception ex)
+                        catch (Exception ex)
+                        {
+                            FindReferenceLogger.LogError($"解析文件 {file} 时出错: {ex.Message}");
+                        }
+                        finally
+                        {
+                            var newProcessed = Interlocked.Increment(ref processedCount);
+                            TryUpdateProgress(newProcessed, totalFiles);
+                        }
+
+                        return localList;
+                    },
+                    localList =>                          // localFinally: 合并
                     {
-                        FindReferenceLogger.LogError($"解析文件 {file} 时出错: {ex.Message}");
-                    }
-                    finally
-                    {
-                        // 线程安全的进度更新
-                        var newProcessed = Interlocked.Increment(ref processedCount);
-                        TryUpdateProgress(newProcessed, totalFiles);
-                    }
-                });
+                        lock (lockObj)
+                        {
+                            result.AddRange(localList);
+                        }
+                    });
             }
             catch (OperationCanceledException)
             {
@@ -78,7 +111,8 @@ namespace FindReference.Editor.Engine
                 });
                 throw;
             }
-            return result.ToList();
+
+            return (result, new Dictionary<string, long>(newMtimes));
         }
 
         private void TryUpdateProgress(int newProcessed, int totalFiles)
@@ -88,35 +122,67 @@ namespace FindReference.Editor.Engine
             UpdateProgress(progress);
         }
 
-        private FindReferenceData ParseOneFile(string file)
+        private FindReferenceData ParseOneFile(
+            string file,
+            IReadOnlyDictionary<string, long> mtimeCache,
+            IReadOnlyDictionary<string, FindReferenceData> existingData,
+            ConcurrentDictionary<string, long> newMtimes)
         {
             var guid = ConvertPath2Guid(file);
-
             if (string.IsNullOrEmpty(guid)) return null;
-            var set = new HashSet<string>(); // 记录依赖集合
-            using var sr = new StreamReader(file);
-            var content = sr.ReadToEnd();
 
-            // 应用三种模式提取 GUID，所有匹配加入同一个 HashSet（自动去重）
-            var matches1 = FindReferenceConfig.FindGuidRegex1.Matches(content);
-            foreach (Match match in matches1)
+            // 方向4：mtime 检查，命中则跳过 content 解析
+            long currentMtime = 0;
+            try
             {
-                set.Add(match.Groups[1].Value);
+                currentMtime = File.GetLastWriteTimeUtc(file).Ticks;
+            }
+            catch
+            {
+                currentMtime = 0;
             }
 
-            var matches2 = FindReferenceConfig.FindGuidRegex2.Matches(content);
-            foreach (Match match in matches2)
+            newMtimes[file] = currentMtime;
+
+            // 如果 mtime 未变且有缓存数据，直接复用
+            if (mtimeCache != null &&
+                mtimeCache.TryGetValue(file, out var cachedMtime) &&
+                cachedMtime == currentMtime &&
+                existingData != null &&
+                existingData.TryGetValue(guid, out var cachedData))
             {
-                set.Add(match.Groups[1].Value);
+                // 复用缓存数据（children 不变，parents 稍后重建）
+                var reuseData = new FindReferenceData(guid, cachedData.ChildrenSet.ToArray(), null);
+                return reuseData;
             }
 
-            var matches3 = FindReferenceConfig.FindGuidRegex3.Matches(content);
-            foreach (Match match in matches3)
+            // 方向2：使用合并正则，一次扫描获取所有格式的 GUID
+            var set = new HashSet<string>();
+            try
             {
-                set.Add(match.Groups[1].Value);
+                using var sr = new StreamReader(file);
+                var content = sr.ReadToEnd();
+
+                var matches = FindReferenceConfig.FindGuidRegexAll.Matches(content);
+                foreach (Match match in matches)
+                {
+                    // 三个捕获组，取第一个非空的
+                    for (int i = 1; i <= 3; i++)
+                    {
+                        if (match.Groups[i].Success)
+                        {
+                            set.Add(match.Groups[i].Value);
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                FindReferenceLogger.LogError($"读取文件内容失败 {file}: {ex.Message}");
+                return null;
             }
 
-            // 去掉文件自身 GUID（避免自引用）
             set.Remove(guid);
 
             var children = set.ToArray();

@@ -105,7 +105,10 @@ namespace FindReference.Editor.Engine
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
 
-            var task = RefreshCache(_cancellationTokenSource.Token);
+            // 方向1：主线程预取 AssetDatabase 路径，消除 Directory.GetFiles IO
+            var allAssetPaths = AssetDatabase.GetAllAssetPaths();
+
+            var task = RefreshCache(allAssetPaths, _cancellationTokenSource.Token);
             task.ContinueWith(t =>
             {
                 if (t.IsFaulted)
@@ -163,7 +166,8 @@ namespace FindReference.Editor.Engine
                     return;
                 }
 
-                var refData = await new ParseReferenceTask(processFiles, cancellationToken).CustomTask;
+                // 增量更新不用 mtime 优化（files 已是变更文件）
+                var (refData, _) = await new ParseReferenceTask(processFiles, cancellationToken).CustomTask;
 
                 _dataBase.UpdateData(refData);
             }
@@ -182,18 +186,28 @@ namespace FindReference.Editor.Engine
             }
         }
 
-        private async Task RefreshCache(CancellationToken cancellationToken = default)
+        private async Task RefreshCache(string[] allAssetPaths, CancellationToken cancellationToken = default)
         {
             double reGeTime = 0;
             try
             {
                 IsWorking = true;
                 reGeTime = EditorApplication.timeSinceStartup;
-                var processFiles = await new GetFilePathListTask(Application.dataPath, cancellationToken)
-                    .CustomTask;
-                var refData = await new ParseReferenceTask(processFiles, cancellationToken).CustomTask;
 
-                _dataBase.SetData(refData);
+                // 方向1：用预取的路径替代 Directory.GetFiles
+                var filteredPaths = await new GetFilePathListTask(allAssetPaths, cancellationToken).CustomTask;
+
+                // 方向4：获取 mtime 缓存用于跳过未变更文件
+                var mtimeCache = _dataBase.GetMtimeCache();
+                var existingData = _dataBase.GetReferenceDataDict();
+
+                var (refData, newMtimes) = await new ParseReferenceTask(
+                    filteredPaths,
+                    cancellationToken,
+                    mtimeCache,
+                    existingData).CustomTask;
+
+                _dataBase.SetData(refData, newMtimes);
             }
             catch (OperationCanceledException)
             {

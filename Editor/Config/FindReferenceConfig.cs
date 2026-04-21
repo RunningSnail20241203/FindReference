@@ -34,6 +34,13 @@ namespace FindReference.Editor.Config
             @"""guid""\s*:\s*""([0-9a-f]{32})""",
             RegexOptions.Compiled);
 
+        // 合并正则：一次扫描匹配三种格式（方向2：合并正则）
+        public static readonly Regex FindGuidRegexAll = new(
+            @"(?:(?:m_AssetGUID|m_Script|m_SourcePrefab|m_CorrespondingSourceObject|m_ObjectReference|m_Texture|texture|guid|GUID|m_SceneGUID)\s*:\s*([0-9a-f]{32})|" +
+            @"\{\s*fileID\s*:\s*-?\d+\s*,\s*guid\s*:\s*([0-9a-f]{32})\s*,\s*type\s*:\s*\d+\s*\}|" +
+            @"""guid""\s*:\s*""([0-9a-f]{32})"")",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         // 兼容旧代码的单一正则（已弃用，但保留以防万一）
         public static readonly Regex FindGuidRegex = FindGuidRegex1;
 

@@ -15,9 +15,10 @@ namespace FindReference.Editor.Engine
     {
         public Task<List<string>> CustomTask { get; }
 
-        public GetFilePathListTask(string path, CancellationToken cancellationToken = default)
+        // 方向1：接收主线程预取的 AssetDatabase 路径，去掉 Directory.GetFiles IO
+        public GetFilePathListTask(string[] allAssetPaths, CancellationToken cancellationToken = default)
         {
-            CustomTask = Task.Run(() => GenerateFileList(path, cancellationToken), cancellationToken);
+            CustomTask = Task.Run(() => FilterFileList(allAssetPaths, cancellationToken), cancellationToken);
         }
 
         private const float GetFilesProgress = 0.5f;
@@ -33,36 +34,47 @@ namespace FindReference.Editor.Engine
             _progress = value;
         }
 
-        private List<string> GenerateFileList(string directory, CancellationToken cancellationToken = default)
+        // 方向3：线程本地 List 模式，替代 ConcurrentBag
+        private List<string> FilterFileList(string[] allAssetPaths, CancellationToken cancellationToken = default)
         {
             UpdateProgress(0f);
 
-            var result = new ConcurrentBag<string>();
-            // 获取所有文件
-            var files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Environment.ProcessorCount,
                 CancellationToken = cancellationToken
             };
-            var totalFiles = files.Length;
+            var totalFiles = allAssetPaths.Length;
             var processedCount = 0;
+            var result = new List<string>();
+            var lockObj = new object();
 
             try
             {
-                Parallel.ForEach(files, parallelOptions, (file, state) =>
-                {
-                    var extension = Path.GetExtension(file).ToLowerInvariant();
-                    if (FindReferenceConfig.IsSupportedExtension(extension))
+                Parallel.ForEach(
+                    allAssetPaths,
+                    parallelOptions,
+                    () => new List<string>(),  // localInit
+                    (path, state, localList) => // body
                     {
-                        result.Add(file);
-                        // Debug.Log($"Added file: {file}");
-                    }
+                        var extension = Path.GetExtension(path).ToLowerInvariant();
+                        if (FindReferenceConfig.IsSupportedExtension(extension))
+                        {
+                            localList.Add(path);
+                        }
 
-                    // 线程安全的进度更新
-                    var newProcessed = Interlocked.Increment(ref processedCount);
-                    TryUpdateProgress(newProcessed, totalFiles);
-                });
+                        var newProcessed = Interlocked.Increment(ref processedCount);
+                        TryUpdateProgress(newProcessed, totalFiles);
+
+                        return localList;
+                    },
+                    localList =>  // localFinally
+                    {
+                        lock (lockObj)
+                        {
+                            result.AddRange(localList);
+                        }
+                    });
             }
             catch (OperationCanceledException)
             {
@@ -74,7 +86,7 @@ namespace FindReference.Editor.Engine
                 throw;
             }
 
-            return result.ToList();
+            return result;
         }
 
         private void TryUpdateProgress(int newProcessed, int totalFiles)

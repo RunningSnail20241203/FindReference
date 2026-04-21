@@ -15,6 +15,8 @@ namespace FindReference.Editor.Data
         #region Private Data
 
         [SerializeField] private List<FindReferenceData> dataList = new();
+        [SerializeField] private List<string> mtimeFiles = new();       // mtime cache: 文件路径列表
+        [SerializeField] private List<long> mtimeTicks = new();         // mtime cache: 对应的修改时间(ticks)
         private readonly ConcurrentDictionary<string, FindReferenceData> _referenceDict = new();
         private readonly object _listenersLock = new();
         private const string AssetPath = "Library/FindReference/FindReferenceDataBase.asset";
@@ -25,7 +27,7 @@ namespace FindReference.Editor.Data
 
         #region Public APIs
 
-        public void SetData(List<FindReferenceData> referenceArr)
+        public void SetData(List<FindReferenceData> referenceArr, Dictionary<string, long> newMtimes = null)
         {
             var reGeTime = EditorApplication.timeSinceStartup;
             BuildReference();
@@ -48,6 +50,13 @@ namespace FindReference.Editor.Data
                 {
                     _isDirty |= UpdateChildRelation(value);
                 }
+
+                // 更新 mtime 缓存
+                if (newMtimes != null)
+                {
+                    UpdateMtimeCache(newMtimes);
+                }
+
                 Save();
             }
         }
@@ -88,6 +97,33 @@ namespace FindReference.Editor.Data
         {
             _referenceDict.Clear();
             dataList.ForEach(x => _referenceDict.TryAdd(x.Guid, x));
+        }
+
+        public IReadOnlyDictionary<string, long> GetMtimeCache()
+        {
+            var dict = new Dictionary<string, long>();
+            for (int i = 0; i < mtimeFiles.Count && i < mtimeTicks.Count; i++)
+            {
+                dict[mtimeFiles[i]] = mtimeTicks[i];
+            }
+            return dict;
+        }
+
+        public IReadOnlyDictionary<string, FindReferenceData> GetReferenceDataDict()
+        {
+            return _referenceDict;
+        }
+
+        private void UpdateMtimeCache(Dictionary<string, long> newMtimes)
+        {
+            mtimeFiles.Clear();
+            mtimeTicks.Clear();
+            foreach (var kvp in newMtimes)
+            {
+                mtimeFiles.Add(kvp.Key);
+                mtimeTicks.Add(kvp.Value);
+            }
+            _isDirty = true;
         }
 
         public void DeleteAsset(string guid)
