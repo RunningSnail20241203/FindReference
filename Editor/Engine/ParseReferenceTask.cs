@@ -28,9 +28,6 @@ namespace FindReference.Editor.Engine
                 cancellationToken);
         }
 
-        public Task<(List<FindReferenceData>, Dictionary<string, long>)> CustomTask { get; }
-        // private static readonly Regex Regex = new("(?:m_AssetGUID|guid|value): ([0-9a-f]{32})");
-
         private float _progress;
 
         private void UpdateProgress(float value)
