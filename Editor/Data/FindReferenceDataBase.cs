@@ -19,6 +19,7 @@ namespace FindReference.Editor.Data
         [SerializeField] private List<long> mtimeTicks = new();         // mtime cache: 对应的修改时间(ticks)
         private readonly ConcurrentDictionary<string, FindReferenceData> _referenceDict = new();
         private readonly object _listenersLock = new();
+        private Dictionary<string, long> _mtimeCacheSnapshot;           // 缓存 mtime 字典避免每次重建
         private const string AssetPath = "Library/FindReference/FindReferenceDataBase.asset";
         private bool _isDirty;
 
@@ -38,17 +39,31 @@ namespace FindReference.Editor.Data
             {
                 _referenceDict.Clear();
 
-                // 将传入的 FindReferenceData 对象存储到字典中，以 Guid 作为键
-                foreach (var data in referenceArr)
-                {
-                    _referenceDict[data.Guid] = data;
-                }
+                // Phase A: 并行写入字典
+                Parallel.ForEach(referenceArr, data => _referenceDict[data.Guid] = data);
 
-                // 遍历所有 FindReferenceData 对象，构建子节点引用关系
-                var values = _referenceDict.Values.ToList();
-                foreach (var value in values)
+                // Phase B: 并行构建倒排索引 child -> parents（HashSet 安全隔离在独立对象中）
+                var childToParents = new ConcurrentDictionary<string, ConcurrentBag<string>>();
+                Parallel.ForEach(_referenceDict.Values, node =>
                 {
-                    _isDirty |= UpdateChildRelation(value);
+                    foreach (var childGuid in node.ChildrenSet)
+                    {
+                        childToParents.GetOrAdd(childGuid, _ => new ConcurrentBag<string>()).Add(node.Guid);
+                    }
+                });
+
+                // Phase C: 顺序应用 parent 链接（保证 HashSet<string> 写入线程安全）
+                foreach (var kvp in childToParents)
+                {
+                    if (!_referenceDict.TryGetValue(kvp.Key, out var childNode))
+                    {
+                        childNode = new FindReferenceData(kvp.Key);
+                        _referenceDict.TryAdd(kvp.Key, childNode);
+                    }
+                    foreach (var parentGuid in kvp.Value)
+                    {
+                        _isDirty |= childNode.AddParent(parentGuid);
+                    }
                 }
 
                 // 更新 mtime 缓存
@@ -101,12 +116,13 @@ namespace FindReference.Editor.Data
 
         public IReadOnlyDictionary<string, long> GetMtimeCache()
         {
-            var dict = new Dictionary<string, long>();
+            if (_mtimeCacheSnapshot != null) return _mtimeCacheSnapshot;
+            _mtimeCacheSnapshot = new Dictionary<string, long>(mtimeFiles.Count);
             for (int i = 0; i < mtimeFiles.Count && i < mtimeTicks.Count; i++)
             {
-                dict[mtimeFiles[i]] = mtimeTicks[i];
+                _mtimeCacheSnapshot[mtimeFiles[i]] = mtimeTicks[i];
             }
-            return dict;
+            return _mtimeCacheSnapshot;
         }
 
         public IReadOnlyDictionary<string, FindReferenceData> GetReferenceDataDict()
@@ -116,6 +132,7 @@ namespace FindReference.Editor.Data
 
         private void UpdateMtimeCache(Dictionary<string, long> newMtimes)
         {
+            _mtimeCacheSnapshot = null; // 失效缓存
             mtimeFiles.Clear();
             mtimeTicks.Clear();
             foreach (var kvp in newMtimes)

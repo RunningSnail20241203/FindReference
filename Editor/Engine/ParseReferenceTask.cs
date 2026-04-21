@@ -165,22 +165,27 @@ namespace FindReference.Editor.Engine
             }
 
             // 方向2：使用合并正则，一次扫描获取所有格式的 GUID
+            // 逐行读取以避免大文件 LOH 分配，Unity YAML 中 GUID 引用总是单行
             var set = new HashSet<string>();
             try
             {
-                using var sr = new StreamReader(file);
-                var content = sr.ReadToEnd();
+                using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.SequentialScan);
+                using var sr = new StreamReader(fs, System.Text.Encoding.UTF8, true, 8192);
 
-                var matches = FindReferenceConfig.FindGuidRegexAll.Matches(content);
-                foreach (Match match in matches)
+                string line;
+                while ((line = sr.ReadLine()) != null)
                 {
-                    // 三个捕获组，取第一个非空的
-                    for (int i = 1; i <= 3; i++)
+                    var matches = FindReferenceConfig.FindGuidRegexAll.Matches(line);
+                    foreach (Match match in matches)
                     {
-                        if (match.Groups[i].Success)
+                        // 三个捕获组，取第一个非空的
+                        for (int i = 1; i <= 3; i++)
                         {
-                            set.Add(match.Groups[i].Value);
-                            break;
+                            if (match.Groups[i].Success)
+                            {
+                                set.Add(match.Groups[i].Value);
+                                break;
+                            }
                         }
                     }
                 }
@@ -209,7 +214,9 @@ namespace FindReference.Editor.Engine
 
             try
             {
-                using var metaSr = new StreamReader(metaPath);
+                // FileOptions.SequentialScan 优化 OS 预读，冷启动时避免 page cache 污染
+                using var fs = new FileStream(metaPath, FileMode.Open, FileAccess.Read, FileShare.Read, 512, FileOptions.SequentialScan);
+                using var metaSr = new StreamReader(fs, System.Text.Encoding.UTF8, true, 512);
                 string line;
                 while ((line = metaSr.ReadLine()) != null)
                 {
