@@ -82,6 +82,14 @@ namespace FindReference.Editor.Engine
                                 localList.Add(data);
                             }
                         }
+                        catch (ThreadAbortException)
+                        {
+                            throw; // domain reload 中断，不捕获，让线程正常终止
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw; // 用户取消，同样不捕获
+                        }
                         catch (Exception ex)
                         {
                             FindReferenceLogger.LogError($"解析文件 {file} 时出错: {ex.Message}");
