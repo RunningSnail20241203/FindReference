@@ -55,6 +55,12 @@ namespace FindReference.Editor.EventListener
             }
         }
 
+        public void Publish(FEventType eventType, BaseEventData data)
+        {
+            // FindReferenceLogger.Log($"Publish:{eventType}|{data}");
+            _eventQueue.Enqueue((eventType, data));
+        }
+
         public void Clear()
         {
             lock (_listenersLock)
