@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using FindReference.Editor.Common;
@@ -14,7 +15,8 @@ namespace FindReference.Editor.Data
         #region Private Data
 
         [SerializeField] private List<FindReferenceData> dataList = new();
-        private readonly Dictionary<string, FindReferenceData> _referenceDict = new();
+        private readonly ConcurrentDictionary<string, FindReferenceData> _referenceDict = new();
+        private readonly object _listenersLock = new();
         private const string AssetPath = "Library/FindReference/FindReferenceDataBase.asset";
         private bool _isDirty;
 
@@ -56,17 +58,17 @@ namespace FindReference.Editor.Data
             {
                 if (_referenceDict.TryGetValue(data.Guid, out var dataInDict))
                 {
+                    // 删除旧 data 的 children 对其他节点的 parent 关系
                     _isDirty |= DeleteChildRelation(dataInDict);
                 }
-                else
-                {
-                    _referenceDict.Add(data.Guid, data);
-                    _isDirty = true;
-                }
 
+                // 用新 data 替换字典中的记录
+                _referenceDict[data.Guid] = data;
+
+                // 对新 data 的 children 建立 parent 关系
                 _isDirty |= UpdateChildRelation(data);
             }
-            
+
             Save();
         }
 

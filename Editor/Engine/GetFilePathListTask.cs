@@ -14,9 +14,9 @@ namespace FindReference.Editor.Engine
     {
         public Task<List<string>> CustomTask { get; }
 
-        public GetFilePathListTask(string path)
+        public GetFilePathListTask(string path, CancellationToken cancellationToken = default)
         {
-            CustomTask = Task.Run(() => GenerateFileList(path));
+            CustomTask = Task.Run(() => GenerateFileList(path, cancellationToken), cancellationToken);
         }
 
         private const float GetFilesProgress = 0.5f;
@@ -32,34 +32,47 @@ namespace FindReference.Editor.Engine
             _progress = value;
         }
 
-        private List<string> GenerateFileList(string directory)
+        private List<string> GenerateFileList(string directory, CancellationToken cancellationToken = default)
         {
             UpdateProgress(0f);
-            
+
             var result = new ConcurrentBag<string>();
             // 获取所有文件
             var files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
             var parallelOptions = new ParallelOptions
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
             };
             var totalFiles = files.Length;
             var processedCount = 0;
 
-            Parallel.ForEach(files, parallelOptions, (file, state) =>
+            try
             {
-                var extension = Path.GetExtension(file).ToLowerInvariant();
-                if (FindReferenceConfig.IsSupportedExtension(extension))
+                Parallel.ForEach(files, parallelOptions, (file, state) =>
                 {
-                    result.Add(file);
-                    // Debug.Log($"Added file: {file}");
-                }
-                
-                // 线程安全的进度更新
-                var newProcessed = Interlocked.Increment(ref processedCount);
-                TryUpdateProgress(newProcessed, totalFiles);
-            });
-            
+                    var extension = Path.GetExtension(file).ToLowerInvariant();
+                    if (FindReferenceConfig.IsSupportedExtension(extension))
+                    {
+                        result.Add(file);
+                        // Debug.Log($"Added file: {file}");
+                    }
+
+                    // 线程安全的进度更新
+                    var newProcessed = Interlocked.Increment(ref processedCount);
+                    TryUpdateProgress(newProcessed, totalFiles);
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                EventCenter.Instance.Publish(FEventType.GetFilesTask, new TaskProgressUpdateEvent()
+                {
+                    OldProgress = _progress,
+                    NewProgress = 0
+                });
+                throw;
+            }
+
             return result.ToList();
         }
 

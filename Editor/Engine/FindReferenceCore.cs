@@ -22,6 +22,7 @@ namespace FindReference.Editor.Engine
 
         private FindReferenceDataBase _dataBase;
         private static FindReferenceCore _instance;
+        private CancellationTokenSource _cancellationTokenSource;
 
         #endregion
 
@@ -91,9 +92,6 @@ namespace FindReference.Editor.Engine
             return _dataBase.QueryChildren(guid);
         }
 
-        /// <summary>
-        /// 重建整个缓存 todo 优化搜集文件列表的性能
-        /// </summary>
         public void RefreshDataBase()
         {
             if (!IsInitialized())
@@ -102,7 +100,15 @@ namespace FindReference.Editor.Engine
                 return;
             }
 
-            RefreshCache();
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = new CancellationTokenSource();
+
+            var task = RefreshCache(_cancellationTokenSource.Token);
+            task.ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    FindReferenceLogger.LogError($"RefreshCache 失败: {t.Exception?.InnerException?.Message}");
+            }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         /// <summary>
@@ -117,7 +123,12 @@ namespace FindReference.Editor.Engine
                 return;
             }
 
-            UpdateCacheSilent(assetPaths);
+            var task = UpdateCacheSilent(assetPaths, _cancellationTokenSource?.Token ?? CancellationToken.None);
+            task.ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    FindReferenceLogger.LogError($"UpdateCacheSilent 失败: {t.Exception?.InnerException?.Message}");
+            }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         // 后台静默删除资源引用
@@ -136,7 +147,7 @@ namespace FindReference.Editor.Engine
 
         #region Private Method
 
-        private async void UpdateCacheSilent(List<string> processFiles)
+        private async Task UpdateCacheSilent(List<string> processFiles, CancellationToken cancellationToken = default)
         {
             double startTime = 0;
             try
@@ -150,9 +161,13 @@ namespace FindReference.Editor.Engine
                     return;
                 }
 
-                var refData = await new ParseReferenceTask(processFiles).CustomTask;
+                var refData = await new ParseReferenceTask(processFiles, cancellationToken).CustomTask;
 
                 _dataBase.UpdateData(refData);
+            }
+            catch (OperationCanceledException)
+            {
+                FindReferenceLogger.LogError("静默刷新缓存被取消");
             }
             catch (Exception e)
             {
@@ -165,16 +180,16 @@ namespace FindReference.Editor.Engine
             }
         }
 
-        private async void RefreshCache()
+        private async Task RefreshCache(CancellationToken cancellationToken = default)
         {
             double reGeTime = 0;
             try
             {
                 IsWorking = true;
                 reGeTime = EditorApplication.timeSinceStartup;
-                var processFiles = await new GetFilePathListTask(Application.dataPath)
+                var processFiles = await new GetFilePathListTask(Application.dataPath, cancellationToken)
                     .CustomTask;
-                var refData = await new ParseReferenceTask(processFiles).CustomTask;
+                var refData = await new ParseReferenceTask(processFiles, cancellationToken).CustomTask;
 
                 _dataBase.SetData(refData);
             }

@@ -37,7 +37,7 @@ namespace FindReference.Editor.View
 
         #region Private Data
         private Vector2 _scrollPos;
-        private CancellationTokenSource _cancellationTokenSource;
+        private CancellationTokenSource _cancellationTokenSource = new();
         #endregion
 
         #region Unity Override Methods
@@ -111,6 +111,10 @@ namespace FindReference.Editor.View
             {
                 if (GUILayout.Button(text))
                 {
+                    // 启动新操作前重置 CancellationTokenSource
+                    _cancellationTokenSource?.Dispose();
+                    _cancellationTokenSource = new CancellationTokenSource();
+
                     EditorApplication.update += EventCenter.Instance.Update;
                     EventCenter.Instance.Register(FEventType.GetFilesTask, OnGetFilesTaskProgress);
                     EventCenter.Instance.Register(FEventType.ParseTask, OnParseReferencesTaskProgress);
@@ -130,6 +134,11 @@ namespace FindReference.Editor.View
             {
                 return "正在重建数据库";
             }
+        }
+
+        private void OnDisable()
+        {
+            _cancellationTokenSource?.Dispose();
         }
 
         private void DrawDebugBtn()
@@ -173,7 +182,7 @@ namespace FindReference.Editor.View
             // FindReferenceLogger.Log($"OnGetFilesTaskProgress:{evt1.NewProgress}");
             if (EditorUtility.DisplayCancelableProgressBar("正在搜集文件列表", "", evt1.NewProgress))
             {
-                _cancellationTokenSource.Cancel();
+                _cancellationTokenSource?.Cancel();
             }
         }
 
@@ -184,7 +193,7 @@ namespace FindReference.Editor.View
             // FindReferenceLogger.Log($"OnParseReferencesTaskProgress:{evt1.NewProgress}");
             if (EditorUtility.DisplayCancelableProgressBar("正在解析文件引用关系", "", evt1.NewProgress))
             {
-                _cancellationTokenSource.Cancel();
+                _cancellationTokenSource?.Cancel();
             }
         }
 

@@ -21,39 +21,46 @@ namespace FindReference.Editor.EventListener
             }
         }
 
+        private readonly Dictionary<FEventType, List<Action<BaseEventData>>> _listeners = new();
+        private readonly ConcurrentQueue<(FEventType, BaseEventData)> _eventQueue = new();
+        private readonly object _listenersLock = new();
+
         public void Register(FEventType eventType, Action<BaseEventData> action)
         {
-            // FindReferenceLogger.Log($"Register {eventType} {action.Method.Name}");
-            if (_listeners.TryGetValue(eventType, out var listenerList))
+            lock (_listenersLock)
             {
-                if (!listenerList.Contains(action)) listenerList.Add(action);
-            }
-            else
-            {
-                _listeners.Add(eventType, new List<Action<BaseEventData>> { action });
+                // FindReferenceLogger.Log($"Register {eventType} {action.Method.Name}");
+                if (_listeners.TryGetValue(eventType, out var listenerList))
+                {
+                    if (!listenerList.Contains(action)) listenerList.Add(action);
+                }
+                else
+                {
+                    _listeners.Add(eventType, new List<Action<BaseEventData>> { action });
+                }
             }
         }
 
         public void UnRegister(FEventType eventType, Action<BaseEventData> action)
         {
-            if (_listeners.TryGetValue(eventType, out var listenerList))
+            lock (_listenersLock)
             {
-                if (listenerList.Remove(action))
+                if (_listeners.TryGetValue(eventType, out var listenerList))
                 {
-                    // FindReferenceLogger.Log($"UnRegister {eventType} {action.Method.Name}");
+                    if (listenerList.Remove(action))
+                    {
+                        // FindReferenceLogger.Log($"UnRegister {eventType} {action.Method.Name}");
+                    }
                 }
             }
         }
 
-        public void Publish(FEventType eventType, BaseEventData data)
-        {
-            // FindReferenceLogger.Log($"Publish:{eventType}|{data}");
-            _eventQueue.Enqueue((eventType, data));
-        }
-
         public void Clear()
         {
-            _listeners.Clear();
+            lock (_listenersLock)
+            {
+                _listeners.Clear();
+            }
             _eventQueue.Clear();
         }
 
@@ -61,22 +68,22 @@ namespace FindReference.Editor.EventListener
         {
             while (_eventQueue.TryDequeue(out var evt))
             {
-                if (!_listeners.TryGetValue(evt.Item1, out var listenerList)) continue;
-                foreach (var listener in listenerList)
+                lock (_listenersLock)
                 {
-                    try
+                    if (!_listeners.TryGetValue(evt.Item1, out var listenerList)) continue;
+                    foreach (var listener in listenerList)
                     {
-                        listener.Invoke(evt.Item2);
-                    }
-                    catch (Exception e)
-                    {
-                        FindReferenceLogger.LogError($"{e.Message}");
+                        try
+                        {
+                            listener.Invoke(evt.Item2);
+                        }
+                        catch (Exception e)
+                        {
+                            FindReferenceLogger.LogError($"{e.Message}");
+                        }
                     }
                 }
             }
         }
-
-        private readonly Dictionary<FEventType, List<Action<BaseEventData>>> _listeners = new();
-        private readonly ConcurrentQueue<(FEventType, BaseEventData)> _eventQueue = new();
     }
 }

@@ -19,9 +19,30 @@ namespace FindReference.Editor.Watcher
         public static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets,
             string[] movedFromAssetPaths)
         {
-            
+            // 处理外部删除（git rm 等）— 直接从缓存中移除，不走 cache 积累
+            foreach (var assetPath in deletedAssets)
+            {
+                var guid = AssetDatabase.AssetPathToGUID(assetPath);
+                if (!string.IsNullOrEmpty(guid))
+                {
+                    FindReferenceLogger.Log($"检测到资源被删除（外部）：{assetPath} (guid: {guid})");
+                    FindReferenceCore.Instance.ProcessDeleteAsset(guid);
+                }
+            }
+
+            // 处理移动（旧路径的引用已无效，新路径在 importedAssets 中）
+            foreach (var oldPath in movedFromAssetPaths)
+            {
+                var guid = AssetDatabase.AssetPathToGUID(oldPath);
+                if (!string.IsNullOrEmpty(guid))
+                {
+                    FindReferenceLogger.Log($"检测到资源被移动（旧位置）：{oldPath} (guid: {guid})");
+                    FindReferenceCore.Instance.ProcessDeleteAsset(guid);
+                }
+            }
+
             if (importedAssets.Length == 0) return;
-            
+
             FindReferenceLogger.Log($"检测到 {importedAssets.Length} 个资源变化");
             // foreach (var str in importedAssets)
             // {
@@ -51,9 +72,9 @@ namespace FindReference.Editor.Watcher
 
         private static void ProcessAssets()
         {
-            FindReferenceCore.Instance.ProcessChangedAssets(FindReferenceAssetChangeCache.instance
-                .ChangeAssetPaths);
-            FindReferenceAssetChangeCache.instance.Clear();
+            var paths = FindReferenceAssetChangeCache.instance.ChangeAssetPaths.ToList();  // 快照
+            FindReferenceAssetChangeCache.instance.Clear();  // 先清，新增的下次再处理
+            FindReferenceCore.Instance.ProcessChangedAssets(paths);
         }
     }
 
